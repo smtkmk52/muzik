@@ -6,6 +6,9 @@ RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.21/community" >> /etc/apk/rep
 # Sistem bağımlılıkları
 RUN apk add --no-cache nodejs npm ffmpeg yt-dlp python3 py3-pip
 
+# Sistemin yt-dlp versiyonu eski olabilir, pip ile güncelle
+RUN pip3 install --break-system-packages --upgrade yt-dlp
+
 # YouTube-DLP ve FFmpeg test
 RUN yt-dlp --version && ffmpeg -version | head -1
 
