@@ -41,7 +41,7 @@ function ytdlpSearch(query, limit = 5) {
   ];
   const result = spawnSync('yt-dlp', args, {
     cwd: __dirname,
-    timeout: 40000,
+    timeout: YT_DLP_TIMEOUT,
     encoding: 'buffer',
     windowsHide: true,
   });
@@ -174,17 +174,33 @@ function ytdlpPlaylist(url) {
     '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     '--sleep-interval', '1',
     url,
-  ], { timeout: 60000, encoding: 'buffer', windowsHide: true });
-  if (result.error) throw result.error;
+  ], { timeout: IS_PRODUCTION ? 80000 : 60000, encoding: 'buffer', windowsHide: true });
+  
+  if (result.error) {
+    console.error('[ytdlpPlaylist] spawn hatası:', result.error.message);
+    throw result.error;
+  }
+  
   const text = decodeOutput(result.stdout || Buffer.alloc(0)).trim();
-  if (!text) return [];
-  const data = JSON.parse(text);
-  return (data.entries || []).filter(e => e?.id && e?.title).map(e => ({
-    title: e.title,
-    url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
-    id: e.id,
-    duration: e.duration || 0,
-  }));
+  if (!text) {
+    console.warn('[ytdlpPlaylist] Boş çıktı');
+    return [];
+  }
+  
+  try {
+    const data = JSON.parse(text);
+    const entries = (data.entries || []).filter(e => e?.id && e?.title);
+    console.log(`[ytdlpPlaylist] Başarılı - entry sayısı: ${entries.length}`);
+    return entries.map(e => ({
+      title: e.title,
+      url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
+      id: e.id,
+      duration: e.duration || 0,
+    }));
+  } catch (e) {
+    console.error('[ytdlpPlaylist] JSON parse hatası:', e.message);
+    return [];
+  }
 }
 
 /** ID3 tag yaz: başlık, sanatçı; thumbnail korunur */
@@ -204,9 +220,24 @@ function ytdlpGetTitle(url) {
     '--socket-timeout', '15',
     '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     url,
-  ], { timeout: 15000, windowsHide: true, encoding: 'buffer' });
-  if (result.error || !result.stdout?.length) return 'audio';
-  return decodeOutput(result.stdout).trim() || 'audio';
+  ], { timeout: IS_PRODUCTION ? 25000 : 15000, windowsHide: true, encoding: 'buffer' });
+  
+  if (result.error) {
+    console.warn('[ytdlpGetTitle] Spawn hatası:', result.error.message);
+    return 'audio';
+  }
+  
+  if (!result.stdout?.length) {
+    console.warn('[ytdlpGetTitle] Boş stdout');
+    return 'audio';
+  }
+  
+  try {
+    return decodeOutput(result.stdout).trim() || 'audio';
+  } catch (e) {
+    console.warn('[ytdlpGetTitle] Decode hatası:', e.message);
+    return 'audio';
+  }
 }
 
 function parseProgress(dlEntry, text) {
@@ -229,6 +260,10 @@ const PORT = process.env.PORT || 3000;
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 const BATCH_SEARCH_DELAY_MS = 600;
 const BATCH_CONCURRENCY = 5;
+
+// Render'da daha uzun timeout
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || process.env.RENDER;
+const YT_DLP_TIMEOUT = IS_PRODUCTION ? 50000 : 40000;  // 50 saniye Render'da, 40 lokal'da
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const INDEX_PATH = path.join(PUBLIC_DIR, 'index.html');
