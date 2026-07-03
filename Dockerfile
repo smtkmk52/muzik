@@ -21,8 +21,9 @@ RUN npm install --production
 # Uygulama dosyaları
 COPY . .
 
-# Downloads klasörü
-RUN mkdir -p downloads
+# Dosya ve klasörlerin var olduğundan emin ol
+RUN mkdir -p downloads public
+RUN ls -la public/ 2>/dev/null || echo "Hata: public klasörü yok"
 
 ENV PORT=3000
 EXPOSE 3000

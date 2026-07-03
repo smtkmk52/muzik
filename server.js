@@ -179,13 +179,27 @@ const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 const BATCH_SEARCH_DELAY_MS = 600;
 const BATCH_CONCURRENCY = 5;
 
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const INDEX_PATH = path.join(PUBLIC_DIR, 'index.html');
+
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.use(express.static(PUBLIC_DIR));
+
+app.get('/', (req, res) => {
+  if (fs.existsSync(INDEX_PATH)) {
+    res.sendFile(INDEX_PATH);
+  } else {
+    res.status(200).send('<html><body><h1>🎵 Muzik Server çalışıyor!</h1><p>public/index.html bulunamadı.</p></body></html>');
+  }
+});
 
 if (!fs.existsSync(DOWNLOADS_DIR)) {
   fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(PUBLIC_DIR)) {
+  fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 }
 
 const downloads = {};
