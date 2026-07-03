@@ -34,8 +34,10 @@ function ytdlpSearch(query, limit = 5) {
     '--no-download',
     '--ignore-errors',
     '--no-warnings',
-    '--extractor-args', 'youtube:player_client=web,android',
-    '--socket-timeout', '10',
+    '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
+    '--socket-timeout', '15',
+    '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    '--sleep-interval', '1',
   ];
   const result = spawnSync('yt-dlp', args, {
     cwd: __dirname,
@@ -129,8 +131,10 @@ function ytdlpPlaylist(url) {
   const result = spawnSync('yt-dlp', [
     '--flat-playlist', '--dump-single-json', '--no-download',
     '--ignore-errors', '--no-warnings',
-    '--extractor-args', 'youtube:player_client=web,android',
-    '--socket-timeout', '10',
+    '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
+    '--socket-timeout', '15',
+    '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    '--sleep-interval', '1',
     url,
   ], { timeout: 60000, encoding: 'buffer', windowsHide: true });
   if (result.error) throw result.error;
@@ -158,8 +162,9 @@ function writeID3Tags(filePath, info) {
 function ytdlpGetTitle(url) {
   const result = spawnSync('yt-dlp', [
     '--print', 'title', '--no-warnings', '--no-download',
-    '--extractor-args', 'youtube:player_client=web,android',
-    '--socket-timeout', '10',
+    '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
+    '--socket-timeout', '15',
+    '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     url,
   ], { timeout: 15000, windowsHide: true, encoding: 'buffer' });
   if (result.error || !result.stdout?.length) return 'audio';
@@ -280,8 +285,11 @@ app.post('/api/download', (req, res) => {
 
   const ytArgs = ['--no-warnings', '--no-playlist', '--progress', '--embed-thumbnail',
     '--http-chunk-size', '10M',
-    '--extractor-args', 'youtube:player_client=web,android',
-    '--socket-timeout', '10',
+    '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
+    '--socket-timeout', '15',
+    '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    '--sleep-interval', '2',
+    '--skip-unavailable-fragments',
     '-o', path.join('downloads', `${id}.%(ext)s`)];
   if (fmt === 'mp4') {
     ytArgs.unshift('-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]', '--merge-output-format', 'mp4',
@@ -478,8 +486,11 @@ function processBatchItem(batchId, idx, onDone) {
 
     const ytArgs = ['--no-warnings', '--no-playlist', '--progress', '--embed-thumbnail',
       '--http-chunk-size', '10M',
-      '--extractor-args', 'youtube:player_client=web,android',
-      '--socket-timeout', '10',
+      '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
+      '--socket-timeout', '15',
+      '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      '--sleep-interval', '2',
+      '--skip-unavailable-fragments',
       '-o', path.join('downloads', `${id}.%(ext)s`)];
     if (fmt === 'mp4') {
       ytArgs.unshift('-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]', '--merge-output-format', 'mp4',
