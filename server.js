@@ -41,26 +41,39 @@ function ytdlpSearch(query, limit = 5) {
   ];
   const result = spawnSync('yt-dlp', args, {
     cwd: __dirname,
-    timeout: 35000,
+    timeout: 40000,
     encoding: 'buffer',
     windowsHide: true,
   });
   
   if (result.error) {
-    console.error('yt-dlp spawn hatası:', result.error.message);
+    console.error('[ytdlpSearch] spawn hatası:', result.error.message);
     throw result.error;
+  }
+  
+  // Exit code kontrolü
+  if (result.status !== 0 && result.status !== null) {
+    const stderr = decodeOutput(result.stderr || Buffer.alloc(0));
+    const stdout = decodeOutput(result.stdout || Buffer.alloc(0));
+    console.error(`[ytdlpSearch] Exit code ${result.status}:`, stderr || stdout);
+    
+    if ((stderr + stdout).includes('Sign in to confirm')) {
+      throw new Error('YouTube bot algılaması - lütfen doğrudan linki yapıştır');
+    }
   }
   
   const text = decodeOutput(result.stdout || Buffer.alloc(0)).trim();
   if (!text) {
-    console.warn('yt-dlp boş çıktı verdi, query:', query);
+    console.warn('[ytdlpSearch] Boş çıktı, query:', query);
     return null;
   }
   
   try {
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    console.log('[ytdlpSearch] Başarılı - entry sayısı:', parsed?.entries?.length || 0);
+    return parsed;
   } catch (e) {
-    console.error('JSON parsing hatası:', e.message, 'text uzunluğu:', text.length);
+    console.error('[ytdlpSearch] JSON parse hatası:', e.message);
     return null;
   }
 }
@@ -121,13 +134,24 @@ function findBestEntry(data, query) {
 }
 
 function findTrack(query) {
-  for (const variant of buildSearchVariants(query)) {
+  const variants = buildSearchVariants(query);
+  console.log(`[findTrack] Denenecek varyantlar: ${variants.join(', ')}`);
+  
+  for (const variant of variants) {
     try {
+      console.log(`[findTrack] Deneniyor: "${variant}"`);
       const data = ytdlpSearch(variant, 5);
       const entry = findBestEntry(data, query);
-      if (entry?.id) return entry;
-    } catch (_) { /* sonraki varyant */ }
+      if (entry?.id) {
+        console.log(`[findTrack] Bulundu: "${entry.title}"`);
+        return entry;
+      }
+      console.log(`[findTrack] Bu varyant için entry bulunamadı`);
+    } catch (err) {
+      console.warn(`[findTrack] Varyant başarısız: "${variant}" - ${err.message}`);
+    }
   }
+  console.log(`[findTrack] Hiçbir varyant başarılı olmadı`);
   return null;
 }
 
@@ -236,24 +260,22 @@ app.post('/api/search', (req, res) => {
   if (!query) return res.status(400).json({ error: 'Arama kelimesi girin.' });
 
   try {
-    const data = ytdlpSearch(query, 10);
-    if (!data) throw new Error('yt-dlp boş sonuç döndü');
+    console.log(`[SEARCH] Query: "${query}"`);
     
-    const entries = Array.isArray(data.entries) ? data.entries : [];
-    const results = entries
-      .filter(e => e && e.title && e.id)
-      .map(e => ({
-        title: e.title,
-        url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
-        id: e.id,
-        duration: e.duration || 0,
-      }));
+    let data = null;
+    try {
+      data = ytdlpSearch(query, 10);
+    } catch (ytErr) {
+      console.error(`[SEARCH] yt-dlp hatası:`, ytErr.message);
+      // yt-dlp başarısız olsa bile fallback'i dene
+    }
     
-    if (results.length === 0) {
-      // Fallback: Başka arama yöntemini dene
+    if (!data) {
+      console.log('[SEARCH] yt-dlp boş sonuç verdi, fallback deneniyor...');
       try {
         const entry = findTrack(query);
         if (entry) {
+          console.log('[SEARCH] Fallback başarılı, geri döndürülüyor');
           return res.json({
             results: [{
               title: entry.title,
@@ -263,32 +285,57 @@ app.post('/api/search', (req, res) => {
             }],
           });
         }
-      } catch (_) { /* fallback başarısız */ }
+      } catch (findErr) {
+        console.error('[SEARCH] Fallback da başarısız:', findErr.message);
+      }
       
-      return res.json({ results: [], message: 'Sonuç bulunamadı. YouTube linki doğrudan yapıştırmayı dene.' });
+      console.log('[SEARCH] Hiçbir yöntem başarılı olmadı');
+      return res.json({ results: [], message: 'Sonuç bulunamadı. YouTube video linkini doğrudan yapıştırmayı dene. (Örn: https://www.youtube.com/watch?v=...)' });
+    }
+    
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    console.log(`[SEARCH] Bulunan entry sayısı: ${entries.length}`);
+    
+    const results = entries
+      .filter(e => e && e.title && e.id)
+      .map(e => ({
+        title: e.title,
+        url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
+        id: e.id,
+        duration: e.duration || 0,
+      }));
+    
+    console.log(`[SEARCH] Filtrelenen sonuç sayısı: ${results.length}`);
+    
+    if (results.length === 0) {
+      return res.json({ results: [], message: 'Sonuç bulunamadı. YouTube video linkini doğrudan yapıştırmayı dene.' });
     }
     
     res.json({ results });
   } catch (err) {
-    console.error('Arama hatası:', err);
-    res.status(500).json({ error: 'Arama başarısız: ' + err.message });
+    console.error('[SEARCH] Beklenmeyen hata:', err);
+    res.status(500).json({ error: 'Arama başarısız: ' + (err?.message || 'Bilinmeyen hata') });
   }
 });
 
 // YouTube playlist
 app.post('/api/playlist', (req, res) => {
   const { url } = req.body;
-  if (!url || !url.includes('youtube.com/playlist') && !url.includes('list=')) {
+  if (!url || (!url.includes('youtube.com/playlist') && !url.includes('list='))) {
     return res.status(400).json({ error: 'Geçerli bir YouTube playlist linki girin.' });
   }
   try {
+    console.log('[PLAYLIST] URL:', url);
     const videos = ytdlpPlaylist(url);
     if (videos.length > 0) {
+      console.log('[PLAYLIST] Başarılı - video sayısı:', videos.length);
       res.json({ success: true, videos });
     } else {
+      console.log('[PLAYLIST] Playlistte video bulunamadı');
       res.json({ success: false, message: 'Playlistte video bulunamadı.' });
     }
   } catch (err) {
+    console.error('[PLAYLIST] Hata:', err.message);
     res.status(500).json({ error: 'Playlist alınamadı: ' + err.message.substring(0, 100) });
   }
 });
