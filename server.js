@@ -36,7 +36,6 @@ function ytdlpSearch(query, limit = 5) {
     '--no-warnings',
     '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
     '--socket-timeout', '15',
-    '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     '--sleep-interval', '1',
   ];
   const result = spawnSync('yt-dlp', args, {
@@ -171,7 +170,6 @@ function ytdlpPlaylist(url) {
     '--ignore-errors', '--no-warnings',
     '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
     '--socket-timeout', '15',
-    '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     '--sleep-interval', '1',
     url,
   ], { timeout: IS_PRODUCTION ? 80000 : 60000, encoding: 'buffer', windowsHide: true });
@@ -218,7 +216,6 @@ function ytdlpGetTitle(url) {
     '--print', 'title', '--no-warnings', '--no-download',
     '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
     '--socket-timeout', '15',
-    '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     url,
   ], { timeout: IS_PRODUCTION ? 25000 : 15000, windowsHide: true, encoding: 'buffer' });
   
@@ -396,7 +393,6 @@ app.post('/api/download', (req, res) => {
     '--http-chunk-size', '10M',
     '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
     '--socket-timeout', '15',
-    '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     '--sleep-interval', '2',
     '--skip-unavailable-fragments',
     '-o', path.join('downloads', `${id}.%(ext)s`)];
@@ -597,7 +593,6 @@ function processBatchItem(batchId, idx, onDone) {
       '--http-chunk-size', '10M',
       '--extractor-args', 'youtube:player_client=web,mweb,android,tv',
       '--socket-timeout', '15',
-      '--http-headers', 'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       '--sleep-interval', '2',
       '--skip-unavailable-fragments',
       '-o', path.join('downloads', `${id}.%(ext)s`)];
