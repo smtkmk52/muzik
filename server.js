@@ -45,10 +45,24 @@ function ytdlpSearch(query, limit = 5) {
     encoding: 'buffer',
     windowsHide: true,
   });
-  if (result.error) throw result.error;
+  
+  if (result.error) {
+    console.error('yt-dlp spawn hatası:', result.error.message);
+    throw result.error;
+  }
+  
   const text = decodeOutput(result.stdout || Buffer.alloc(0)).trim();
-  if (!text) return null;
-  return JSON.parse(text);
+  if (!text) {
+    console.warn('yt-dlp boş çıktı verdi, query:', query);
+    return null;
+  }
+  
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error('JSON parsing hatası:', e.message, 'text uzunluğu:', text.length);
+    return null;
+  }
 }
 
 function buildSearchVariants(query) {
@@ -223,27 +237,40 @@ app.post('/api/search', (req, res) => {
 
   try {
     const data = ytdlpSearch(query, 10);
-    const results = (data?.entries || []).filter(e => e.title && e.id).map(e => ({
-      title: e.title,
-      url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
-      id: e.id,
-      duration: e.duration || 0,
-    }));
+    if (!data) throw new Error('yt-dlp boş sonuç döndü');
+    
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    const results = entries
+      .filter(e => e && e.title && e.id)
+      .map(e => ({
+        title: e.title,
+        url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
+        id: e.id,
+        duration: e.duration || 0,
+      }));
+    
     if (results.length === 0) {
-      const entry = findTrack(query);
-      if (entry) {
-        return res.json({
-          results: [{
-            title: entry.title,
-            url: entry.url || `https://www.youtube.com/watch?v=${entry.id}`,
-            id: entry.id,
-            duration: entry.duration || 0,
-          }],
-        });
-      }
+      // Fallback: Başka arama yöntemini dene
+      try {
+        const entry = findTrack(query);
+        if (entry) {
+          return res.json({
+            results: [{
+              title: entry.title,
+              url: entry.url || `https://www.youtube.com/watch?v=${entry.id}`,
+              id: entry.id,
+              duration: entry.duration || 0,
+            }],
+          });
+        }
+      } catch (_) { /* fallback başarısız */ }
+      
+      return res.json({ results: [], message: 'Sonuç bulunamadı. YouTube linki doğrudan yapıştırmayı dene.' });
     }
+    
     res.json({ results });
   } catch (err) {
+    console.error('Arama hatası:', err);
     res.status(500).json({ error: 'Arama başarısız: ' + err.message });
   }
 });
